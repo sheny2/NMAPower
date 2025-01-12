@@ -1,4 +1,4 @@
-#' Generate a Simulated Network Meta-Analysis Dataset
+#' Generate a simulated Network Meta-Analysis Dataset
 #'
 #' This function creates a simulated dataset for network meta-analysis with binary outcomes.
 #' Users can specify the number of studies, treatments, treatment effects, and sample size range.
@@ -12,8 +12,8 @@
 #' set.seed(12345)
 #' data <- generate_NMA(
 #'   num_studies = 10,
-#'   num_treatments = 4,
-#'   treatment_effects = c(0.2, 0.3, 0.5, 0.7),
+#'   num_treatments = 3,
+#'   treatment_effects = c(0.3, 0.5, 0.7),
 #'   sample_size_range = c(50, 200)
 #' )
 #' print(data)
