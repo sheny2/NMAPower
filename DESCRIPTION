@@ -1,0 +1,10 @@
+Package: NMAPower
+Title: Power Analysis for Bayesian Network Meta-Analysis 
+Version: 0.0.0.9000
+Authors@R: 
+    person("Yicheng", "Shen", , "yshen128@jh.edu", role = c("aut", "cre"))
+Description: A collection of functions for conducting statistical power analysis on Bayeisan network meta-analyses in R.
+License: GPL (>=3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
