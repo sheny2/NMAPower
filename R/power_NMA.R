@@ -42,6 +42,10 @@ power_NMA <- function(data) {
   # Extract summaries of the results
   summary_result <- summary(result)
 
+  # Power simulations
+
+    # TBD
+
 
   return(list(model_results = summary_result))
 }
