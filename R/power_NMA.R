@@ -32,7 +32,8 @@ power_NMA <- function(data) {
   ))
 
   # Define the model
-  model <- mtc.model(mtc_network, type="consistency", likelihood="binom", link="logit", linearModel="random",
+  model <- mtc.model(mtc_network,
+                     type="consistency", likelihood="binom", link="logit", linearModel="random",
                      hy.prior =  mtc.hy.prior(type="std.dev", distr="dunif", 0.01, 10),
                      re.prior.sd = 10)
 
