@@ -26,11 +26,11 @@
 #'
 #' @examples
 #' \dontrun{
-#' res <- power_sim_nma_3(S = 100, k_ab = 6, k_ac = 6, k_bc = 3)
+#' res <- nma_power_sim_3node(S = 100, k_ab = 6, k_ac = 6, k_bc = 3)
 #' print(res)
 #' hist(res$iterations$point_est, main = "Distribution of Point Estimates", xlab = "Log Odds Ratio (B vs C)")
 #' }
-power_sim_nma_3 <- function(S = 100,
+nma_power_sim_3node <- function(S = 100,
                           k_ab = 0, k_ac = 0, k_bc = 0,
                           pi_a = 0.5,
                           OR_ab = 1.4, OR_ac = 1.8,

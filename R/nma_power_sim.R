@@ -34,7 +34,7 @@
 #'   OR = c(1.2, 1.4, 1.1, NA) # OR for B vs C is inferred under consistency
 #' )
 #'
-#' res <- power_sim_nma(
+#' res <- nma_power_sim(
 #'   S = 100,
 #'   target_contrast = c("B", "C"),
 #'   network_design = design
@@ -42,7 +42,7 @@
 #' print(res)
 #' }
 #'
-power_sim_nma <- function(S = 100,
+nma_power_sim <- function(S = 100,
                              target_contrast = c("B", "C"),
                              network_design,
                              pi_base = 0.5,
