@@ -17,9 +17,10 @@ Since `NMAPower` relies on Bayesian MCMC sampling, you must install JAGS (Just A
 install.packages(c("gemtc", "foreach", "doParallel", "igraph"))
 
 # Install NMAPower 
-# devtools::install_github("yourusername/NMAPower")
+# devtools::install_github("sheny2/NMAPower")
 library(NMAPower)
 library(gemtc)
+library(doParallel)
 ```
 
 
@@ -51,6 +52,34 @@ results_general <- nma_power_sim(
 
 print(results_general)
 ```
+
+## NMA Power Simulation Results
+
+| Metric | Value |
+|---|---:|
+| Iterations Executed | 100 / 100 |
+| Statistical Power | 16.00% |
+| Correct Rank Probability | 27.00% |
+| Average Bias | 0.0076 |
+| Average Absolute Bias | 0.1061 |
+
+---
+
+### Target Contrast Focus
+
+- **C vs B** (True OR = **1.167**)
+
+---
+
+### Network Configuration Input
+
+| t1 | t2 | k |
+|---|---|---:|
+| A | B | 6 |
+| A | C | 6 |
+| A | D | 2 |
+| B | C | 3 |
+
 
 
 ### Retrospective / Post-Hoc Analysis
@@ -109,3 +138,20 @@ posthoc_results <- nma_power_posthoc(
 print(posthoc_results)
 ```
 
+## Post-Hoc NMA Power Evaluation Results
+
+| Metric | Value |
+|---|---:|
+| Iterations Executed | 50 |
+| Statistical Power | 98.00% |
+| Correct Rank Probability | 100.00% |
+| Average Bias | -0.0174 |
+| Average Absolute Bias | 0.0929 |
+
+---
+
+### Extracted Design Parameters
+
+- **Target Contrast:** 2 vs 1  
+- **True Target log(OR):** 0.639  
+- **Estimated Heterogeneity (tau):** 0.010

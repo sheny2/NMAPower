@@ -263,6 +263,6 @@ print.nma_power_sim <- function(x, ...) {
               exp(x$parameters$true_log_ORs[x$parameters$target_contrast[2]] - x$parameters$true_log_ORs[x$parameters$target_contrast[1]])))
   cat("----------------------------------------------\n")
   cat("Network Configuration Input:\n")
-  print(x$parameters$network_design, row.names = FALSE)
+  print(x$parameters$network_design %>% dplyr::select(-OR))
   cat("==============================================\n")
 }
