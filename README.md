@@ -1,4 +1,4 @@
-# NMAPower: Power Evaluation for Bayesian Network Meta-Analysis
+# NMAPower: Power Calculation for Bayesian Network Meta-Analysis
 
 `NMAPower` provides a simulation-based framework to evaluate the empirical operating characteristics of Bayesian Network Meta-Analyses (NMAs). 
 Whether you are designing a new set of clinical trials or evaluating the robustness of an existing evidence network, this package helps you estimate statistical power, treatment efficacy ranking, and estimation bias.
@@ -53,32 +53,25 @@ results_general <- nma_power_sim(
 print(results_general)
 ```
 
-## NMA Power Simulation Results
-
-| Metric | Value |
-|---|---:|
-| Iterations Executed | 100 / 100 |
-| Statistical Power | 16.00% |
-| Correct Rank Probability | 27.00% |
-| Average Bias | 0.0076 |
-| Average Absolute Bias | 0.1061 |
-
----
-
-### Target Contrast Focus
-
-- **C vs B** (True OR = **1.167**)
-
----
-
-### Network Configuration Input
-
-| t1 | t2 | k |
-|---|---|---:|
-| A | B | 6 |
-| A | C | 6 |
-| A | D | 2 |
-| B | C | 3 |
+==============================================
+        NMA Power Simulation Results
+==============================================
+Iterations Executed : 100 / 100
+Statistical Power   : 16.00%
+Correct Rank Prob.  : 27.00%
+Average Bias        : 0.0076
+Average Abs. Bias   : 0.1061
+----------------------------------------------
+Target Contrast Focus:
+  C vs B (True OR = 1.167)
+----------------------------------------------
+Network Configuration Input:
+  t1  t2  k
+  A   B   6
+  A   C   6
+  A   D   2
+  B   C   3
+==============================================
 
 
 
