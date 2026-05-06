@@ -121,6 +121,7 @@ plot(network,
      edge.color = "darkgray",
      main = "NMA Network Topology")
 ```
+<img width="363" height="327" alt="Screenshot 2026-05-05 at 10 40 02 PM" src="https://github.com/user-attachments/assets/1ecb61d7-9000-4dd1-b841-00af0a505ffa" />
 
 
 Now, pass the dataset into `nma_power_posthoc()`. 
