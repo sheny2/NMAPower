@@ -3,10 +3,10 @@
 `NMAPower` provides a simulation-based framework to evaluate the empirical operating characteristics of Bayesian Network Meta-Analyses (NMAs). 
 Whether you are designing a new set of clinical trials or evaluating the robustness of an existing evidence network, this package helps you estimate statistical power, treatment efficacy ranking, and estimation bias.
 
-The package integrates seamlessly with the Bayesian modeling ecosystem (for example `gemtc` for CB-NMA) and utilizes parallel processing to handle intensive Markov chain Monte Carlo (MCMC) simulations efficiently.
+The package integrates with the Bayesian NMA modeling ecosystem (currently supporting `gemtc` for CB-NMA) and utilizes parallel processing to handle intensive Markov chain Monte Carlo (MCMC) simulations efficiently.
 
 📦 Installation
-Since `NMAPower` relies on Bayesian MCMC sampling, you must install JAGS (Just Another Gibbs Sampler) on your system before installing the package in R.
+Since `NMAPower` relies on Bayesian MCMC sampling, we recommend you to install/update JAGS (Just Another Gibbs Sampler) on your system before installing relevant packages in R.
 
 * Download and install JAGS from mcmc-jags.sourceforge.io.
 
