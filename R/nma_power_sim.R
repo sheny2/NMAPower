@@ -68,7 +68,7 @@ nma_power_sim <- function(S = 100,
   }
 
   # -------------------------------------------------------------------------
-  # Graph Traversal: Infer True Parameters for All Nodes (Consistency Check)
+  # Infer True Parameters for All Nodes (Consistency Check)
   # -------------------------------------------------------------------------
   ref_node <- all_nodes[1]
   true_log_OR <- setNames(rep(NA, length(all_nodes)), all_nodes)
@@ -124,7 +124,7 @@ nma_power_sim <- function(S = 100,
 
   result_matrix <- foreach::foreach(iter = 1:S, .combine = rbind, .errorhandling = 'remove', .packages = "gemtc") %dopar% {
 
-    # Nested Helper: Generate binomial data for a specific edge
+    # Generate binomial data for a specific edge
     simulate_edge <- function(k, t1_name, t2_name, log_OR_true, base_prob, tau_val, start_id) {
       dat = data.frame(matrix(ncol = 4, nrow = 0))
       for (j in 1:k) {

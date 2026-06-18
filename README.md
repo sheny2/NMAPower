@@ -101,7 +101,7 @@ mock_data <- generate_NMA(
 
 
 
-Before evaluating power, you can visualize your dataset's network structure using `gemtc`'s built-in plotting capabilities:
+Before evaluating power, you can visualize your dataset's network structure using `gemtc`'s built-in plotting functions:
 
 ```r
 # Convert the mock data into a gemtc network format
@@ -125,7 +125,7 @@ plot(network,
 
 
 Now, pass the dataset into `nma_power_posthoc()`. 
-This function will automatically fit a Bayesian NMA to your data to extract the underlying parameters (effect sizes and heterogeneity), and then perform simulations that perfectly preserve your original network topology, arm configurations, and sample sizes.
+This function will automatically fit a Bayesian NMA to your data to extract the underlying parameters (effect sizes and heterogeneity), and then perform simulations that preserve your original network topology, arm configurations, and sample sizes.
 
 ```r
 # Evaluate power for comparing Treatment 1 vs Treatment 2
