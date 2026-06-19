@@ -131,9 +131,9 @@ This function will automatically fit a Bayesian NMA to your data to extract the 
 # Evaluate power for comparing Treatment 1 vs Treatment 2
 posthoc_results <- nma_power_posthoc(
   data = mock_data, 
-  target_contrast = c(1, 2), # Evaluates Treatment 2 vs Treatment 1[cite: 9]
+  target_contrast = c(1, 2), # Evaluates Treatment 2 vs Treatment 1
   S = 50,
-  verbose = FALSE # Suppresses JAGS console output[cite: 9]
+  verbose = FALSE # Suppresses JAGS console output
 )
 
 print(posthoc_results)
