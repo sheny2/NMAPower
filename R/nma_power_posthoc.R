@@ -12,6 +12,10 @@
 #' @param S Number of simulation iterations.
 #' @param verbose Logical. If FALSE, suppresses JAGS output during simulation.
 #' @param n.cores Number of cores to use for parallel processing.
+#' @param seed Optional non-negative integer used for the initial fit and to
+#'   create reproducible, independent random-number streams on parallel workers.
+#' @param convergence_threshold Maximum acceptable Gelman-Rubin PSRF. Set to
+#'   `NULL` to skip convergence checks.
 #'
 #' @return An object of class "nma_posthoc_power" containing summary metrics.
 #' @export
@@ -19,11 +23,22 @@ nma_power_posthoc <- function(data,
                                     target_contrast,
                                     S = 100,
                                     verbose = FALSE,
-                                    n.cores = parallel::detectCores() - 1) {
+                                    n.cores = NULL,
+                                    seed = NULL,
+                                    convergence_threshold = 1.1) {
 
   if (!requireNamespace("gemtc", quietly = TRUE)) stop("Package 'gemtc' is required.")
   if (!requireNamespace("foreach", quietly = TRUE)) stop("Package 'foreach' is required.")
   if (!requireNamespace("doParallel", quietly = TRUE)) stop("Package 'doParallel' is required.")
+
+  S <- .assert_scalar_count(S, "S")
+  n.cores <- .validate_n_cores(n.cores)
+  seed <- .validate_seed(seed)
+  convergence_threshold <- .validate_convergence_threshold(convergence_threshold)
+  if (!is.data.frame(data) || nrow(data) == 0L) {
+    stop("`data` must be a non-empty data frame.", call. = FALSE)
+  }
+  if (!is.null(seed)) set.seed(seed)
 
   # Map user column names (e.g., from generate_NMA) to gemtc requirements
   expected_cols <- c("study.id", "treatment.id", "sample.size", "response")
@@ -36,9 +51,28 @@ nma_power_posthoc <- function(data,
     )
   } else {
     # Assume it's already in gemtc format
+    required_gemtc <- c("study", "treatment", "sampleSize", "responders")
+    if (!all(required_gemtc %in% names(data))) {
+      stop("`data` must use either NMAPower columns or gemtc arm-based columns.", call. = FALSE)
+    }
     dat_gemtc <- data
     dat_gemtc$study <- as.character(dat_gemtc$study)
     dat_gemtc$treatment <- as.character(dat_gemtc$treatment)
+  }
+
+  if (anyNA(dat_gemtc[, c("study", "treatment", "sampleSize", "responders")]) ||
+      any(!is.finite(dat_gemtc$sampleSize)) || any(!is.finite(dat_gemtc$responders)) ||
+      any(dat_gemtc$sampleSize < 1) || any(dat_gemtc$sampleSize != floor(dat_gemtc$sampleSize)) ||
+      any(dat_gemtc$responders < 0) || any(dat_gemtc$responders != floor(dat_gemtc$responders)) ||
+      any(dat_gemtc$responders > dat_gemtc$sampleSize)) {
+    stop("Sample sizes and responders must be valid, non-missing binomial counts.", call. = FALSE)
+  }
+  if (any(duplicated(dat_gemtc[, c("study", "treatment")]))) {
+    stop("Each study-treatment combination must appear only once.", call. = FALSE)
+  }
+  arms_per_study <- table(dat_gemtc$study)
+  if (any(arms_per_study < 2L)) {
+    stop("Every study must contain at least two treatment arms.", call. = FALSE)
   }
 
   target_contrast <- as.character(target_contrast)
@@ -57,6 +91,7 @@ nma_power_posthoc <- function(data,
   capture.output(suppressWarnings(suppressMessages({
     out_init <- gemtc::mtc.run(model_init, n.adapt = 1000, n.iter = 5000, thin = 1)
   })))
+  .check_mcmc_convergence(out_init, convergence_threshold)
 
   # Extract true relative effects relative to the network's reference treatment
   ref_trt <- network_init$treatments$id[1]
@@ -103,12 +138,14 @@ nma_power_posthoc <- function(data,
   message("Starting parallel simulation loop...")
 
   # 3. Parallel Simulation Setup
-  cl <- parallel::makeCluster(n.cores)
-  doParallel::registerDoParallel(cl)
+  cl <- .start_cluster(n.cores, seed)
   on.exit(parallel::stopCluster(cl))
 
   # 4. Simulation Loop
-  result_matrix <- foreach::foreach(iter = 1:S, .combine = rbind, .errorhandling = 'remove', .packages = "gemtc") %dopar% {
+  results <- foreach::foreach(iter = seq_len(S), .combine = .append_foreach_result,
+                              .init = list(), .errorhandling = "pass",
+                              .packages = c("gemtc", "coda"),
+                              .export = ".check_mcmc_convergence") %dopar% {
 
     # Generate new responses exactly mapping the existing network architecture
     sim_data <- dat_gemtc
@@ -119,15 +156,21 @@ nma_power_posthoc <- function(data,
       base_trt <- s_data[order(s_data$treatment), "treatment"][1]
       mu_s <- study_baselines[[s]]
 
-      # Draw study-specific random effect vector matching the NMA hierarchical structure
+      # Arm-level deviations induce variance tau^2 for every pairwise contrast
+      # and covariance tau^2 / 2 among contrasts sharing a study baseline.
+      arm_treatments <- as.character(s_data$treatment)
+      arm_deviation <- setNames(
+        rnorm(length(arm_treatments), mean = 0, sd = tau_true / sqrt(2)),
+        arm_treatments
+      )
+
       for (i in 1:nrow(s_data)) {
         trt_k <- s_data$treatment[i]
         n_k <- s_data$sampleSize[i]
 
         # True expected relative effect between arm k and the study's baseline arm
         delta_expected <- true_d[trt_k] - true_d[base_trt]
-        # Incorporate between-study heterogeneity
-        delta_jk <- rnorm(1, mean = delta_expected, sd = tau_true)
+        delta_jk <- delta_expected + arm_deviation[trt_k] - arm_deviation[base_trt]
 
         # Calculate probability and generate binomial outcome
         logit_p <- mu_s + delta_jk
@@ -151,11 +194,14 @@ nma_power_posthoc <- function(data,
     } else {
       sim_out <- gemtc::mtc.run(sim_model, n.adapt = 500, n.iter = 2000, thin = 1)
     }
+    .check_mcmc_convergence(sim_out, convergence_threshold)
 
     # Extract Metrics: Rank Probability
     prob <- gemtc::rank.probability(sim_out, preferredDirection = 1)
     sucra <- gemtc::sucra(round(prob, digits = 3))
     rank_order <- rownames(as.matrix(sort(sucra, decreasing = TRUE)))
+    expected_target_order <- if (true_target_logOR >= 0) target_contrast[2:1] else target_contrast
+    observed_target_order <- rank_order[rank_order %in% target_contrast]
 
     # Extract Metrics: Target Effect
     res <- summary(gemtc::relative.effect(sim_out, target_contrast[1], target_contrast[2]))
@@ -174,6 +220,7 @@ nma_power_posthoc <- function(data,
     c(
       reject_null = as.numeric(0 > ci_upper || 0 < ci_lower),
       rank_correct = as.numeric(identical(rank_order, true_rank_expected)),
+      target_order_correct = as.numeric(identical(observed_target_order, expected_target_order)),
       bias = point_est - true_target_logOR,
       abs_bias = abs(point_est - true_target_logOR),
       point_est = point_est,
@@ -182,22 +229,14 @@ nma_power_posthoc <- function(data,
     )
   }
 
-  if (is.null(result_matrix) || nrow(result_matrix) == 0) {
-    warning("All simulation iterations failed. Check initial model convergence.")
-    return(NULL)
-  }
-
-  df_iterations <- as.data.frame(result_matrix)
+  collected <- .collect_simulation_results(results, S)
+  if (is.null(collected)) return(NULL)
+  df_iterations <- collected$iterations
 
   out <- list(
-    summary = list(
-      successful_iterations = nrow(df_iterations),
-      power = mean(df_iterations$reject_null, na.rm = TRUE),
-      rank_correct_prob = mean(df_iterations$rank_correct, na.rm = TRUE),
-      avg_bias = mean(df_iterations$bias, na.rm = TRUE),
-      avg_abs_bias = mean(df_iterations$abs_bias, na.rm = TRUE)
-    ),
+    summary = .simulation_summary(df_iterations, S, collected$failed_iterations),
     iterations = df_iterations,
+    failure_messages = collected$failure_messages,
     parameters_used = list(
       target_contrast = target_contrast,
       true_target_logOR = true_target_logOR,
@@ -211,14 +250,19 @@ nma_power_posthoc <- function(data,
 }
 
 #' Print method for nma_posthoc_power objects
+#'
+#' @param x An object returned by `nma_power_posthoc()`.
+#' @param ... Additional arguments (currently ignored).
 #' @export
 print.nma_posthoc_power <- function(x, ...) {
   cat("\n==============================================\n")
   cat(" Post-Hoc NMA Power Evaluation Results\n")
   cat("==============================================\n")
   cat(sprintf("Iterations Executed : %d\n", x$summary$successful_iterations))
+  cat(sprintf("Iterations Failed   : %d\n", x$summary$failed_iterations))
   cat(sprintf("Statistical Power   : %.2f%%\n", x$summary$power * 100))
-  cat(sprintf("Correct Rank Prob.  : %.2f%%\n", x$summary$rank_correct_prob * 100))
+  cat(sprintf("Correct Full Rank   : %.2f%%\n", x$summary$rank_correct_prob * 100))
+  cat(sprintf("Correct Target Order: %.2f%%\n", x$summary$target_order_correct_prob * 100))
   cat(sprintf("Average Bias        : %.4f\n", x$summary$avg_bias))
   cat(sprintf("Average Abs. Bias   : %.4f\n", x$summary$avg_abs_bias))
   cat("----------------------------------------------\n")

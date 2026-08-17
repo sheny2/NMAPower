@@ -9,7 +9,9 @@ nma_power_posthoc(
   target_contrast,
   S = 100,
   verbose = FALSE,
-  n.cores = parallel::detectCores() - 1
+  n.cores = NULL,
+  seed = NULL,
+  convergence_threshold = 1.1
 )
 }
 \arguments{
@@ -25,6 +27,12 @@ nma_power_posthoc(
 \item{verbose}{Logical. If FALSE, suppresses JAGS output during simulation.}
 
 \item{n.cores}{Number of cores to use for parallel processing.}
+
+\item{seed}{Optional non-negative integer used for the initial fit and to
+create reproducible, independent random-number streams on parallel workers.}
+
+\item{convergence_threshold}{Maximum acceptable Gelman-Rubin PSRF. Set to
+\code{NULL} to skip convergence checks.}
 }
 \value{
 An object of class "nma_posthoc_power" containing summary metrics.

@@ -14,7 +14,7 @@ Since `NMAPower` relies on Bayesian MCMC sampling, we recommend you to install/u
 
 ```r
 # Install dependencies
-install.packages(c("gemtc", "foreach", "doParallel", "igraph"))
+install.packages(c("gemtc", "coda", "foreach", "doParallel", "igraph"))
 
 # Install NMAPower 
 # devtools::install_github("sheny2/NMAPower")
@@ -47,7 +47,8 @@ results_general <- nma_power_sim(
   target_contrast = c("B", "C"),    # Contrast of interest
   network_design = design,
   pi_base = 0.5,                    # Baseline event probability for Node A
-  tau = 0.2                         # Between-study heterogeneity
+  tau = 0.2,                        # Between-study heterogeneity
+  seed = 2026                       # Reproducible parallel simulation
 )
 
 print(results_general)
@@ -58,8 +59,9 @@ print(results_general)
 | Metric | Value |
 |---|---:|
 | Iterations Executed | 100 / 100 |
+| Iterations Failed | 0 |
 | Statistical Power | 16.00% |
-| Correct Rank Probability | 27.00% |
+| Correct Full-Rank Probability | 27.00% |
 | Average Bias | 0.0076 |
 | Average Absolute Bias | 0.1061 |
 
@@ -133,7 +135,8 @@ posthoc_results <- nma_power_posthoc(
   data = mock_data, 
   target_contrast = c(1, 2), # Evaluates Treatment 2 vs Treatment 1
   S = 50,
-  verbose = FALSE # Suppresses JAGS console output
+  verbose = FALSE, # Suppresses JAGS console output
+  seed = 2026
 )
 
 print(posthoc_results)
@@ -144,8 +147,9 @@ print(posthoc_results)
 | Metric | Value |
 |---|---:|
 | Iterations Executed | 50 |
+| Iterations Failed | 0 |
 | Statistical Power | 98.00% |
-| Correct Rank Probability | 100.00% |
+| Correct Full-Rank Probability | 100.00% |
 | Average Bias | -0.0174 |
 | Average Absolute Bias | 0.0929 |
 

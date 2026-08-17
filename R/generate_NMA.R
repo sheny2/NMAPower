@@ -21,13 +21,23 @@
 
 
 generate_NMA <- function(num_studies, num_treatments, treatment_effects, sample_size_range = c(50, 200)) {
-  # Check inputs
+  num_studies <- .assert_scalar_count(num_studies, "num_studies")
+  num_treatments <- .assert_scalar_count(num_treatments, "num_treatments", minimum = 2L)
+
   if (length(treatment_effects) != num_treatments) {
     stop("The length of treatment_effects must equal the number of treatments.")
   }
 
-  if (any(treatment_effects < 0 | treatment_effects > 1)) {
+  if (!is.numeric(treatment_effects) || anyNA(treatment_effects) ||
+      any(treatment_effects < 0 | treatment_effects > 1)) {
     stop("Treatment effects must be probabilities between 0 and 1.")
+  }
+
+  if (!is.numeric(sample_size_range) || length(sample_size_range) != 2L ||
+      anyNA(sample_size_range) || any(sample_size_range != floor(sample_size_range)) ||
+      sample_size_range[1] < 1L || sample_size_range[2] < sample_size_range[1]) {
+    stop("`sample_size_range` must contain two positive integers in increasing order.",
+         call. = FALSE)
   }
 
   # Initialize an empty data frame
@@ -59,4 +69,3 @@ generate_NMA <- function(num_studies, num_treatments, treatment_effects, sample_
 
   return(dat)
 }
-

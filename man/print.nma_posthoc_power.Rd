@@ -6,6 +6,11 @@
 \usage{
 \method{print}{nma_posthoc_power}(x, ...)
 }
+\arguments{
+\item{x}{An object returned by \code{nma_power_posthoc()}.}
+
+\item{...}{Additional arguments (currently ignored).}
+}
 \description{
 Print method for nma_posthoc_power objects
 }

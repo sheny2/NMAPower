@@ -14,7 +14,9 @@ nma_power_sim_3node(
   OR_ac = 1.8,
   tau = 0.01,
   verbose = FALSE,
-  n.cores = parallel::detectCores() - 1
+  n.cores = NULL,
+  seed = NULL,
+  convergence_threshold = 1.1
 )
 }
 \arguments{
@@ -37,6 +39,12 @@ nma_power_sim_3node(
 \item{verbose}{Logical. If FALSE, suppresses JAGS/MCMC console output.}
 
 \item{n.cores}{Number of cores to use for parallel processing.}
+
+\item{seed}{Optional non-negative integer used to create reproducible,
+independent random-number streams on parallel workers.}
+
+\item{convergence_threshold}{Maximum acceptable Gelman-Rubin PSRF. Set to
+\code{NULL} to skip convergence checks.}
 }
 \value{
 An object of class "nma_power_sim" containing $summary and $iterations.

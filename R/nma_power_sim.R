@@ -19,6 +19,10 @@
 #' @param tau Between-study heterogeneity (standard deviation).
 #' @param verbose Logical. If FALSE, suppresses JAGS/MCMC console output.
 #' @param n.cores Number of cores to use for parallel processing.
+#' @param seed Optional non-negative integer used to create reproducible,
+#'   independent random-number streams on parallel workers.
+#' @param convergence_threshold Maximum acceptable Gelman-Rubin PSRF. Set to
+#'   `NULL` to skip convergence checks.
 #'
 #' @return An object of class "nma_power_sim" containing $summary and $iterations.
 #' @export
@@ -48,18 +52,56 @@ nma_power_sim <- function(S = 100,
                              pi_base = 0.5,
                              tau = 0.2,
                              verbose = FALSE,
-                             n.cores = parallel::detectCores() - 1) {
+                             n.cores = NULL,
+                             seed = NULL,
+                             convergence_threshold = 1.1) {
 
   # Ensure required packages
   if (!requireNamespace("gemtc", quietly = TRUE)) stop("Package 'gemtc' is required.")
   if (!requireNamespace("foreach", quietly = TRUE)) stop("Package 'foreach' is required.")
   if (!requireNamespace("doParallel", quietly = TRUE)) stop("Package 'doParallel' is required.")
 
-  # Clean input data
+  S <- .assert_scalar_count(S, "S")
+  n.cores <- .validate_n_cores(n.cores)
+  seed <- .validate_seed(seed)
+  convergence_threshold <- .validate_convergence_threshold(convergence_threshold)
+  pi_base <- .assert_probability(pi_base, "pi_base")
+  tau <- .assert_nonnegative(tau, "tau")
+
+  if (!is.data.frame(network_design) || nrow(network_design) == 0L) {
+    stop("`network_design` must be a non-empty data frame.", call. = FALSE)
+  }
+  required_columns <- c("t1", "t2", "k", "OR")
+  if (!all(required_columns %in% names(network_design))) {
+    stop("`network_design` must contain columns `t1`, `t2`, `k`, and `OR`.", call. = FALSE)
+  }
+
   network_design$t1 <- as.character(network_design$t1)
   network_design$t2 <- as.character(network_design$t2)
   network_design$k <- as.numeric(network_design$k)
   network_design$OR <- as.numeric(network_design$OR)
+
+  if (anyNA(network_design[, c("t1", "t2", "k")]) ||
+      any(network_design$t1 == "" | network_design$t2 == "")) {
+    stop("Treatment names and study counts cannot be missing or empty.", call. = FALSE)
+  }
+  if (any(network_design$t1 == network_design$t2)) {
+    stop("Each network edge must compare two distinct treatments.", call. = FALSE)
+  }
+  if (any(!is.finite(network_design$k)) || any(network_design$k < 0) ||
+      any(network_design$k != floor(network_design$k))) {
+    stop("`network_design$k` must contain non-negative integers.", call. = FALSE)
+  }
+  if (any(!is.na(network_design$OR) &
+          (!is.finite(network_design$OR) | network_design$OR <= 0))) {
+    stop("Non-missing odds ratios must be finite and greater than zero.", call. = FALSE)
+  }
+
+  target_contrast <- as.character(target_contrast)
+  if (length(target_contrast) != 2L || anyNA(target_contrast) ||
+      target_contrast[1] == target_contrast[2]) {
+    stop("`target_contrast` must identify two distinct treatments.", call. = FALSE)
+  }
 
   # Ensure target contrast exists in the network
   all_nodes <- unique(c(network_design$t1, network_design$t2))
@@ -103,6 +145,12 @@ nma_power_sim <- function(S = 100,
     }
   }
 
+  supplied <- !is.na(network_design$OR)
+  implied <- true_log_OR[network_design$t2[supplied]] - true_log_OR[network_design$t1[supplied]]
+  if (any(abs(implied - log(network_design$OR[supplied])) > 1e-8)) {
+    stop("Supplied odds ratios are inconsistent around at least one network cycle.", call. = FALSE)
+  }
+
   # Calculate True Target OR and Expected Ranking
   point_true <- true_log_OR[target_contrast[2]] - true_log_OR[target_contrast[1]]
 
@@ -113,16 +161,30 @@ nma_power_sim <- function(S = 100,
   ))
   # Ensure target nodes are tracked in rank even if no direct data is generated
   active_nodes <- unique(c(active_nodes, target_contrast))
+  observed_nodes <- unique(c(
+    network_design$t1[network_design$k > 0],
+    network_design$t2[network_design$k > 0]
+  ))
+  if (!all(target_contrast %in% observed_nodes)) {
+    stop("Both target treatments must occur on an edge with at least one study.", call. = FALSE)
+  }
+  observed_edges <- network_design$k > 0
+  if (!.network_is_connected(network_design$t1[observed_edges],
+                             network_design$t2[observed_edges], observed_nodes)) {
+    stop("Edges with `k > 0` must form one connected evidence network.", call. = FALSE)
+  }
   true_rank_expected <- names(sort(true_log_OR[active_nodes], decreasing = TRUE))
 
   # -------------------------------------------------------------------------
   # Parallel Processing Setup
   # -------------------------------------------------------------------------
-  cl <- parallel::makeCluster(n.cores)
-  doParallel::registerDoParallel(cl)
+  cl <- .start_cluster(n.cores, seed)
   on.exit(parallel::stopCluster(cl))
 
-  result_matrix <- foreach::foreach(iter = 1:S, .combine = rbind, .errorhandling = 'remove', .packages = "gemtc") %dopar% {
+  results <- foreach::foreach(iter = seq_len(S), .combine = .append_foreach_result,
+                              .init = list(), .errorhandling = "pass",
+                              .packages = c("gemtc", "coda"),
+                              .export = ".check_mcmc_convergence") %dopar% {
 
     # Generate binomial data for a specific edge
     simulate_edge <- function(k, t1_name, t2_name, log_OR_true, base_prob, tau_val, start_id) {
@@ -186,12 +248,15 @@ nma_power_sim <- function(S = 100,
     } else {
       cons.out <- gemtc::mtc.run(cons.model, n.adapt = 500, n.iter = 2000, thin = 1)
     }
+    .check_mcmc_convergence(cons.out, convergence_threshold)
 
     # SUCRA Ranking
     prob <- gemtc::rank.probability(cons.out, preferredDirection = 1)
     sucra <- gemtc::sucra(round(prob, digits = 3))
     # Extract ranking strictly for active nodes
     rank_order <- rownames(as.matrix(sort(sucra, decreasing = TRUE)))
+    expected_target_order <- if (point_true >= 0) target_contrast[2:1] else target_contrast
+    observed_target_order <- rank_order[rank_order %in% target_contrast]
 
     # Target Relative Effect Extraction
     res <- summary(gemtc::relative.effect(cons.out, target_contrast[1], target_contrast[2]))
@@ -210,6 +275,7 @@ nma_power_sim <- function(S = 100,
     c(
       reject_null = as.numeric(0 > ci_upper || 0 < ci_lower),
       rank_correct = as.numeric(identical(rank_order, true_rank_expected)),
+      target_order_correct = as.numeric(identical(observed_target_order, expected_target_order)),
       bias = point_est - point_true,
       abs_bias = abs(point_est - point_true),
       point_est = point_est,
@@ -219,24 +285,15 @@ nma_power_sim <- function(S = 100,
     )
   }
 
-  if (is.null(result_matrix) || nrow(result_matrix) == 0) {
-    warning("All simulation iterations failed.")
-    return(NULL)
-  }
-
-  df_iterations <- as.data.frame(result_matrix)
-
-  summary_stats <- list(
-    successful_iterations = nrow(df_iterations),
-    power = mean(df_iterations$reject_null, na.rm = TRUE),
-    rank_correct_prob = mean(df_iterations$rank_correct, na.rm = TRUE),
-    avg_bias = mean(df_iterations$bias, na.rm = TRUE),
-    avg_abs_bias = mean(df_iterations$abs_bias, na.rm = TRUE)
-  )
+  collected <- .collect_simulation_results(results, S)
+  if (is.null(collected)) return(NULL)
+  df_iterations <- collected$iterations
+  summary_stats <- .simulation_summary(df_iterations, S, collected$failed_iterations)
 
   out <- list(
     summary = summary_stats,
     iterations = df_iterations,
+    failure_messages = collected$failure_messages,
     parameters = list(S = S, target_contrast = target_contrast, network_design = network_design, tau = tau, true_log_ORs = true_log_OR)
   )
 
@@ -245,14 +302,19 @@ nma_power_sim <- function(S = 100,
 }
 
 #' Print method for nma_power_sim objects
+#'
+#' @param x An object returned by `nma_power_sim()`.
+#' @param ... Additional arguments (currently ignored).
 #' @export
 print.nma_power_sim <- function(x, ...) {
   cat("\n==============================================\n")
   cat("NMA Power Simulation Results\n")
   cat("==============================================\n")
   cat(sprintf("Iterations Executed : %d / %d\n", x$summary$successful_iterations, x$parameters$S))
+  cat(sprintf("Iterations Failed   : %d\n", x$summary$failed_iterations))
   cat(sprintf("Statistical Power   : %.2f%%\n", x$summary$power * 100))
-  cat(sprintf("Correct Rank Prob.  : %.2f%%\n", x$summary$rank_correct_prob * 100))
+  cat(sprintf("Correct Full Rank   : %.2f%%\n", x$summary$rank_correct_prob * 100))
+  cat(sprintf("Correct Target Order: %.2f%%\n", x$summary$target_order_correct_prob * 100))
   cat(sprintf("Average Bias        : %.4f\n", x$summary$avg_bias))
   cat(sprintf("Average Abs. Bias   : %.4f\n", x$summary$avg_abs_bias))
   cat("----------------------------------------------\n")
@@ -263,6 +325,6 @@ print.nma_power_sim <- function(x, ...) {
               exp(x$parameters$true_log_ORs[x$parameters$target_contrast[2]] - x$parameters$true_log_ORs[x$parameters$target_contrast[1]])))
   cat("----------------------------------------------\n")
   cat("Network Configuration Input:\n")
-  print(x$parameters$network_design %>% dplyr::select(-OR))
+  print(x$parameters$network_design[, setdiff(names(x$parameters$network_design), "OR"), drop = FALSE])
   cat("==============================================\n")
 }
